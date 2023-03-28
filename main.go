@@ -1,34 +1,54 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
+	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+
 	"github.com/mrkonxyz/config"
 )
 
 func main() {
 
 	cgf := config.LoadConFig(".")
-
-	// Initialize minio client object.
-	minioClient, err := minio.New(cgf.StorageEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cgf.StorageUser, cgf.StoragePassword, ""),
-		Secure: cgf.StorageSSL,
-	})
+	//ctx := context.Background()
+	minioClient, err := config.ConnectMiniO(cgf)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	// Create a bucket at region 'us-east-1' with object locking enabled.
-	err = minioClient.MakeBucket(context.Background(), cgf.StorageBucketName, minio.MakeBucketOptions{Region: "us-east-1", ObjectLocking: true})
-	if err != nil {
-		fmt.Println("err: ", err)
-		return
-	}
 
-	fmt.Println("Successfully created mybucket.")
+	// err = config.CreateMakeBucket(ctx, cgf, minioClient)
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
+
+	r := gin.Default()
+
+	r.POST("/upload", func(ctx *gin.Context) {
+		userMetaData := map[string]string{"x-amz-acl": "public-read"}
+		img, _ := ctx.FormFile("img")
+		file, _ := img.Open()
+		contentType := img.Header.Get("Content-Type")
+		minioResult, err := minioClient.PutObject(ctx.Request.Context(),
+			cgf.StorageBucketName,
+			img.Filename,
+			file, -1,
+			minio.PutObjectOptions{
+				ContentType:  contentType,
+				UserMetadata: userMetaData,
+			},
+		)
+
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, err)
+			return
+		}
+		ctx.JSON(http.StatusOK, minioResult.Location)
+
+	})
+
+	r.Run()
 
 }
