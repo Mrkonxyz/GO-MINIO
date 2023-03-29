@@ -2,16 +2,22 @@ package config
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-func ConnectMiniO(cgf Config) (*minio.Client, error) {
+func ConnectMiniO(cgf Config, ctx context.Context) (*minio.Client, error) {
 	minioClient, err := minio.New(cgf.StorageEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cgf.StorageUser, cgf.StoragePassword, ""),
 		Secure: cgf.StorageSSL,
 	})
+	errB := CreateMakeBucket(ctx, cgf, minioClient)
+
+	if errB != nil {
+		fmt.Printf("errB: %v\n", errB)
+	}
 	return minioClient, err
 }
 
